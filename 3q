@@ -1,0 +1,63 @@
+SRRIDs = ['A','B']
+
+INDEX="ref/Esalsugineum_173_v1"
+
+
+rule end:
+     input : 
+        "end.txt"
+
+
+rule Hisat2:
+     input  : 
+             ix=INDEX,
+             fwd="data/{SRRID}.fastq.gz"
+     output : 
+             "mapped/{SRRID}.bam"
+     threads : 10
+     shell  : 
+             "/program/hisat2-2.0.3-beta/hisat2 --max-intronlen 30000 -p {threads} -x {input.ix} -U {input.fwd}  | sambamba view -f bam -o {output} -S /dev/stdin"
+
+# add "--rna-strandness FR #RF for dUTP protocol" if your library is constructed based on strandness 
+
+rule sambamba_sort : 
+     input  : 
+            "mapped/{SRRID}.bam"
+     output :
+            "sorted/{SRRID}.sorted.bam"
+            "sorted/{SRRID}.sorted.bai"
+     threads : 10
+     shell  : 
+            "sambamba sort -t {threads} {input}"
+
+#Usage: sambamba-merge [options] <output.bam> <input1.bam> <input2.bam> [...]
+rule sambamba_merge : 
+     input  : 
+            bam=expand("sorted/{SRRID}.sorted.bam",SRRID=SRRIDs),
+            bai=expand("sorted/{SRRID}.sorted.bai",SRRID=SRRIDs)
+     output : 
+            "merged/all.merged.bam"
+     threads : 10
+     shell  : "sambamba merge -t {threads} -o {output} {input.bam}"
+            
+rule stringtie:
+     input  :
+            "merged/all.merged.bam"
+     output : 
+            "st_gff_out/all.merged.bam.stringtie.gff"
+     threads : 10 
+     shell  : 
+            "/program/stringtie-1.2.2.Linux_x86_64/stringtie -p {threads} -o {output} {input}"
+
+rule report : 
+     input  : 
+            "st_gff_out/all.merged.bam.stringtie.gff"
+     output :     
+            "end.txt"
+     shell  : 
+            "touch {output}"
+        
+        
+
+
+
