@@ -1,8 +1,9 @@
-SRRIDs = ["SRR1617532","SRR1617533","SRR1617534","SRR1617535"]
-INDEX  = "ref/Esalsugineum_173_v1"
-FA     = "ref/Esalsugineum_173_v1.fa"
+
+SRRIDs = ["SRR3286447","SRR3286489","SRR3286625","SRR3286642","SRR3286654","SRR3286663"]
+INDEX  = "ref/Athaliana_167_TAIR9"
+FA     = "ref/Athaliana_167_TAIR9.fa"
 PFAM   = "/ref/analysis/References/Pfam-A.hmm"
-GFF    = "ref/Esalsugineum_173_v1.0.gene.gff3"
+GFF    = "ref/Athaliana_167_TAIR10.gene.gff3"
 UNIPROT = "/ref/analysis/References/uniprot/uniprot-all.fasta"
 
 rule end:
@@ -11,14 +12,15 @@ rule end:
 # Single end 
 rule Hisat2:
      input  : 
-             fwd="data/{SRRID}.fastq.gz"
+             #single="data/{SRRID}.fastq.gz", #single end
+             fwd="data/{SRRID}_1.fastq.gz",rev="data/{SRRID}_2.fastq.gz" # paired end 
      params : ix=INDEX
      output : 
              "mapped/{SRRID}.bam"
-     threads : 10
+     threads : 2
      shell  : 
-             "/program/hisat2-2.0.3-beta/hisat2 --max-intronlen 30000 -p {threads} -x {params.ix} -U {input.fwd}  | sambamba view -f bam -o {output} -S /dev/stdin"
-
+             #"/program/hisat2-2.0.3-beta/hisat2 --max-intronlen 30000 -p {threads} -x {params.ix} -U {input.single}  | sambamba view -f bam -o {output} -S /dev/stdin" # single end 
+             "/program/hisat2-2.0.3-beta/hisat2 --max-intronlen 30000 -p {threads} -x {params.ix} -1 {input.fwd} -2 {input.rev}  | sambamba view -f bam -o {output} -S /dev/stdin" # paired-end
 # add "--rna-strandness FR #RF for dUTP protocol" if your library is constructed based on strandness 
 
 rule sambamba_sort : 
@@ -145,9 +147,10 @@ rule cuffcompare:
 
 rule merge:
      input  : gff="predicted/my_csv.csv.addgene.gff3.sort.gff3", tmap="predicted/cuffcmp.my_csv.csv.addgene.gff3.sort.gff3.tmap", gff_old=GFF, pepfa_new="finalout/my_csv.csv.addgene.gff3.sort.gff3.pep.fa"
-     output : gff="predicted/my_csv.csv.addgene.gff3.sort.gff3.merge.all.gff3", fa="finalout/my_csv.csv.addgene.gff3.sort.gff3.pep.fa.new_gene.fa"           
+     output : gff="predicted/my_csv.csv.addgene.gff3.sort.gff3.merge.all.gff3", fa="finalout/my_csv.csv.addgene.gff3.sort.gff3.pep.fa.new_gene.fa"          
+     params : rgff=GFF 
      shell  : '''python2.7 merge.py {input.tmap} {input.gff} {input.gff_old} {input.pepfa_new}
-               cat ref/Esalsugineum_173_v1.0.gene.gff3 predicted/my_csv.csv.addgene.gff3.sort.gff3.merge.gff3 > {output.gff}'''
+               cat {params.rgff} predicted/my_csv.csv.addgene.gff3.sort.gff3.merge.gff3 > {output.gff}'''
 
 rule gt_sort2:
      input  : "predicted/my_csv.csv.addgene.gff3.sort.gff3.merge.all.gff3"
