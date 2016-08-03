@@ -1,11 +1,15 @@
 
-SRRIDs = ["SRR3286447","SRR3286489","SRR3286625","SRR3286642","SRR3286654","SRR3286663"]
-INDEX  = "ref/Athaliana_167_TAIR9"
-FA     = "ref/Athaliana_167_TAIR9.fa"
-PFAM   = "/ref/analysis/References/Pfam-A.hmm"
-GFF    = "ref/Athaliana_167_TAIR10.gene.gff3"
-UNIPROT = "/ref/analysis/References/uniprot/uniprot-all.fasta"
+SRRIDs = [x.strip() for x in open('data/samples').readlines()]
+INDEX  = "ref/Ahal.assembly.scf"
+FA     = "ref/Ahal.assembly.scf.fasta"
+PFAM   = "ref/Pfam-A.hmm"
+GFF    = "ref/Ahal.assembly.genepred.gff3.nosharp.gff3"
+UNIPROT = "ref/uniprot-all.fasta"
 
+HISAT2    = "/programs/hisat2-2.0.4/"
+STRINGTIE = "/programs/stringtie-1.2.4.Linux_x86_64/"
+Transdecoder = "/programs/TransDecoder-3.0.0/"
+AUGUSTUS     = "/programs/augustus-3.2.2"
 rule end:
      input : "finalout/my_csv.csv.addgene.gff3.sort.gff3.merge.all.gff3.sort.gff3","finalout/newgene.annot"
            
@@ -13,14 +17,14 @@ rule end:
 rule Hisat2:
      input  : 
              #single="data/{SRRID}.fastq.gz", #single end
-             fwd="data/{SRRID}_1.fastq.gz",rev="data/{SRRID}_2.fastq.gz" # paired end 
-     params : ix=INDEX
+             fwd="data/{SRRID}_R1.fastq.gz",rev="data/{SRRID}_R2.fastq.gz" # paired end 
+     params : ix=INDEX,cmd=HISAT2
      output : 
              "mapped/{SRRID}.bam"
      threads : 2
      shell  : 
-             #"/program/hisat2-2.0.3-beta/hisat2 --max-intronlen 30000 -p {threads} -x {params.ix} -U {input.single}  | sambamba view -f bam -o {output} -S /dev/stdin" # single end 
-             "/program/hisat2-2.0.3-beta/hisat2 --max-intronlen 30000 -p {threads} -x {params.ix} -1 {input.fwd} -2 {input.rev}  | sambamba view -f bam -o {output} -S /dev/stdin" # paired-end
+             #"{params.cmd}hisat2 --max-intronlen 30000 -p {threads} -x {params.ix} -U {input.single}  | sambamba view -f bam -o {output} -S /dev/stdin" # single end 
+             "{params.cmd}hisat2 --max-intronlen 30000 -p {threads} -x {params.ix} -1 {input.fwd} -2 {input.rev}  | sambamba view -f bam -o {output} -S /dev/stdin" # paired-end
 # add "--rna-strandness FR #RF for dUTP protocol" if your library is constructed based on strandness 
 
 rule sambamba_sort : 
@@ -49,8 +53,9 @@ rule stringtie:
      output : 
             "st_gff_out/all.merged.bam.stringtie.gff"
      threads : 10 
+     params : cmd=STRINGTIE
      shell  : 
-            "/program/stringtie-1.2.2.Linux_x86_64/stringtie -p {threads} -o {output} {input}"
+            "{params.cmd}stringtie -p {threads} -o {output} {input}"
 
 
 rule stringtie2gff3:
@@ -58,15 +63,16 @@ rule stringtie2gff3:
             "st_gff_out/all.merged.bam.stringtie.gff"
      output : 
             "st_gff_out/all.merged.bam.stringtie.gff3"
+     params : cmd=Transdecoder
      shell  : 
-            "/program/TransDecoder-2.1.0/util/cufflinks_gtf_to_alignment_gff3.pl {input} > {output}"
+            "{params.cmd}/util/cufflinks_gtf_to_alignment_gff3.pl {input} > {output}"
 
 rule stringtie2cds:
      input  : "st_gff_out/all.merged.bam.stringtie.gff"
      output : "st_gff_out/all.merged.bam.stringtie.gff.fa"
-     params : fa=FA
+     params : fa=FA,cmd=Transdecoder
      shell  : 
-            "/program/TransDecoder-2.1.0/util/cufflinks_gtf_genome_to_cdna_fasta.pl {input}  {params.fa} > {output}"
+            "{params.cmd}/util/cufflinks_gtf_genome_to_cdna_fasta.pl {input}  {params.fa} > {output}"
 
 
 ### transdecoder 
@@ -74,8 +80,9 @@ rule stringtie2cds:
 rule transdecoder_longOrfs:
      input  : "st_gff_out/all.merged.bam.stringtie.gff.fa"
      output : "all.merged.bam.stringtie.gff.fa.transdecoder_dir/longest_orfs.pep" 
+     params : cmd=Transdecoder
      shell  : 
-            "/program/TransDecoder-2.1.0/TransDecoder.LongOrfs -t {input}"
+            "{params.cmd}/TransDecoder.LongOrfs -t {input}"
 
 rule hmm:
      input  : "all.merged.bam.stringtie.gff.fa.transdecoder_dir/longest_orfs.pep" 
@@ -89,8 +96,9 @@ rule transdecoder_predict:
      input  : fa="st_gff_out/all.merged.bam.stringtie.gff.fa", pfam="all.merged.bam.stringtie.gff.fa.transdecoder_dir/pfam.domtblout"
      output : "predicted/all.merged.bam.stringtie.gff.fa.transdecoder.gff3" 
      threads: 10
+     params : cmd=Transdecoder
      shell  : 
-            '''/program/TransDecoder-2.1.0/TransDecoder.Predict --cpu {threads} -t {input.fa} --retain_pfam_hits {input.pfam}        
+            '''{params.cmd}/TransDecoder.Predict --cpu {threads} -t {input.fa} --retain_pfam_hits {input.pfam}        
                mv all.merged.bam.stringtie.gff.fa.transdecoder.* predicted/'''
         
 rule transdecoder_togenome:
@@ -110,7 +118,8 @@ rule transdecoder_noiseremove:
 rule augustus:
      input  : "st_gff_out/all.merged.bam.stringtie.gff.fa"
      output : "predicted/all.merged.bam.stringtie.gff.fa.augustus.gff3"
-     shell  : "/program/augustus-3.2.1/bin/augustus --species=arabidopsis --genemodel=complete --gff3=on --strand=forward {input} > {output}"
+     params : cmd=AUGUSTUS
+     shell  : "{params.cmd}/bin/augustus --species=arabidopsis --genemodel=complete --gff3=on --strand=forward {input} > {output}"
 
 rule augustus_togenome:
      input  : sgff="st_gff_out/all.merged.bam.stringtie.gff",tgff="predicted/all.merged.bam.stringtie.gff.fa.augustus.gff3"
