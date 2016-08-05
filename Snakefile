@@ -1,26 +1,41 @@
-
 SRRIDs = [x.strip() for x in open('data/samples').readlines()]
-INDEX  = "ref/Ahal.assembly.scf"
-FA     = "ref/Ahal.assembly.scf.fasta"
-PFAM   = "ref/Pfam-A.hmm"
-GFF    = "ref/Ahal.assembly.genepred.gff3.nosharp.gff3"
-UNIPROT = "ref/uniprot-all.fasta"
+INDEX  = "ref/Creinhardtii_281_v5.0"
+FA     = "ref/Creinhardtii_281_v5.0.fa"
+PFAM   = "/ref/analysis/References/Pfam-A.hmm"
+GFF    = "ref/Creinhardtii_281_v5.5.gene.fix.gff3"
+UNIPROT = "/ref/analysis/References/uniprot/uniprot-all.fasta"
 
-HISAT2    = "/programs/hisat2-2.0.4/"
-STRINGTIE = "/programs/stringtie-1.2.4.Linux_x86_64/"
-Transdecoder = "/programs/TransDecoder-3.0.0/"
-AUGUSTUS     = "/programs/augustus-3.2.2"
+HISAT2    = "/program/hisat2-2.0.4/"
+STRINGTIE = "/program/stringtie-1.2.2.Linux_x86_64//"
+Transdecoder = "/program/TransDecoder-3.0.0/"
+AUGUSTUS     = "/program/augustus-3.2.1/"
+
+
+
 rule end:
      input : "finalout/my_csv.csv.addgene.gff3.sort.gff3.merge.all.gff3.sort.gff3","finalout/newgene.annot"
+
+rule NCBIdownload:
+     params : "{SRRID}",SRRID=SRRIDs
+     output : "{SRRID}.sra" 
+     shell  : "python2.7 ncbi_download.py {params}"
+
+rule fastqdump:
+     input  : "{SRRID}.sra"
+     output : "data/{SRRID}_1.fastq.gz","data/{SRRID}_2.fastq.gz" # paired_end
+     shell  : '''fastq-dump  --origfmt -I  --split-files --gzip {input}
+                 mv {wildcards.SRRID}_?.fastq.gz data/
+                 rm {input}'''
+
            
 # Single end 
 rule Hisat2:
      input  : 
              #single="data/{SRRID}.fastq.gz", #single end
-             fwd="data/{SRRID}_R1.fastq.gz",rev="data/{SRRID}_R2.fastq.gz" # paired end 
+             fwd="data/{SRRID}_1.fastq.gz",rev="data/{SRRID}_2.fastq.gz" # paired end 
      params : ix=INDEX,cmd=HISAT2
      output : 
-             "mapped/{SRRID}.bam"
+             "mapped/{SRRID}.pre.bam"
      threads : 2
      shell  : 
              #"{params.cmd}hisat2 --max-intronlen 30000 -p {threads} -x {params.ix} -U {input.single}  | sambamba view -f bam -o {output} -S /dev/stdin" # single end 
@@ -29,13 +44,14 @@ rule Hisat2:
 
 rule sambamba_sort : 
      input  : 
-            "mapped/{SRRID}.bam"
+            "mapped/{SRRID}.pre.bam"
      output :
             "mapped/{SRRID}.sorted.bam",
             "mapped/{SRRID}.sorted.bam.bai"
      threads : 10
      shell  : 
-            "sambamba sort -t {threads} {input}"
+            '''sambamba sort -t {threads} {input}
+               '''
 
 #Usage: sambamba-merge [options] <output.bam> <input1.bam> <input2.bam> [...]
 rule sambamba_merge : 
