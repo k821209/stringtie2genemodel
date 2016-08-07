@@ -1,14 +1,16 @@
 SRRIDs = [x.strip() for x in open('data/samples').readlines()]
-INDEX  = "ref/Creinhardtii_281_v5.0"
-FA     = "ref/Creinhardtii_281_v5.0.fa"
-PFAM   = "/ref/analysis/References/Pfam-A.hmm"
-GFF    = "ref/Creinhardtii_281_v5.5.gene.fix.gff3"
-UNIPROT = "/ref/analysis/References/uniprot/uniprot-all.fasta"
+INDEX  = "/data/References/Creinhardtii/Creinhardtii_281_v5.0"
+FA     = "/data/References/Creinhardtii/Creinhardtii_281_v5.0.fa"
+PFAM   = "/data/References/References/Pfam\ HMM/Pfam-A.hmm"
+GFF    = "/data/References/References/Creinhardtii/Creinhardtii_281_v5.5.gene.fix.gff3"
+UNIPROT = "/data/References/References/uniprot/uniprot-all.fasta.asof2016"
 
-HISAT2    = "/program/hisat2-2.0.4/"
-STRINGTIE = "/program/stringtie-1.2.2.Linux_x86_64//"
-Transdecoder = "/program/TransDecoder-3.0.0/"
-AUGUSTUS     = "/program/augustus-3.2.1/"
+HISAT2    = "/programs/hisat2-2.0.4/"
+STRINGTIE = "/programs/stringtie-1.2.4.Linux_x86_64//"
+Transdecoder = "/programs/TransDecoder-3.0.0/"
+AUGUSTUS     = "/programs/augustus-3.2.2/"
+SPECIES      = "chlamy2011"
+CUFFLINK     = "/programs/cufflinks-2.2.1.Linux_x86_64/"
 
 
 
@@ -46,18 +48,18 @@ rule sambamba_sort :
      input  : 
             "mapped/{SRRID}.pre.bam"
      output :
-            "mapped/{SRRID}.sorted.bam",
-            "mapped/{SRRID}.sorted.bam.bai"
+            "mapped/{SRRID}.sorted.bam"
+            #"mapped/{SRRID}.sorted.bam.bai"
      threads : 10
      shell  : 
-            '''sambamba sort -t {threads} {input}
+            '''sambamba sort -t {threads} -o {output}  {input}
                '''
 
 #Usage: sambamba-merge [options] <output.bam> <input1.bam> <input2.bam> [...]
 rule sambamba_merge : 
      input  : 
             bam=expand("mapped/{SRRID}.sorted.bam",SRRID=SRRIDs),
-            bai=expand("mapped/{SRRID}.sorted.bam.bai",SRRID=SRRIDs)
+            #bai=expand("mapped/{SRRID}.sorted.bam.bai",SRRID=SRRIDs)
      output : 
             "merged/all.merged.bam"
      threads : 10
@@ -134,8 +136,8 @@ rule transdecoder_noiseremove:
 rule augustus:
      input  : "st_gff_out/all.merged.bam.stringtie.gff.fa"
      output : "predicted/all.merged.bam.stringtie.gff.fa.augustus.gff3"
-     params : cmd=AUGUSTUS
-     shell  : "{params.cmd}/bin/augustus --species=arabidopsis --genemodel=complete --gff3=on --strand=forward {input} > {output}"
+     params : cmd=AUGUSTUS,species=SPECIES
+     shell  : "{params.cmd}/bin/augustus --species={params.species} --genemodel=complete --gff3=on --strand=forward {input} > {output}"
 
 rule augustus_togenome:
      input  : sgff="st_gff_out/all.merged.bam.stringtie.gff",tgff="predicted/all.merged.bam.stringtie.gff.fa.augustus.gff3"
@@ -166,8 +168,8 @@ rule gt_sort:
 rule cuffcompare:
      input  : "predicted/my_csv.csv.addgene.gff3.sort.gff3"
      output : "predicted/cuffcmp.my_csv.csv.addgene.gff3.sort.gff3.tmap"
-     params : rgff=GFF
-     shell  : '''/program/cufflinks-2.2.1.Linux_x86_64/cuffcompare -r {params.rgff} {input}
+     params : rgff=GFF, cmd=CUFFLINK
+     shell  : '''{params.cmd}cuffcompare -r {params.rgff} {input}
                  mv cuffcmp.* predicted/'''
 
 rule merge:
