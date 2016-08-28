@@ -10,8 +10,11 @@ import numpy as np
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 
-
-file_tmap        = sys.argv[1] #'./predicted/cuffcmp.my_csv.csv.addgene.gff3.sort.gff3.tmap'
+try:
+    file_tmap        = sys.argv[1] #'./predicted/cuffcmp.my_csv.csv.addgene.gff3.sort.gff3.tmap'
+except IndexError:
+    print(''' args : tmap, refcds, pep, cds ''')
+    exit()
 file_ref_cds     = sys.argv[2] #'/ref/analysis/References/Creinhardtii/annotation/Creinhardtii_281_v5.5.cds.fa'
 file_pep         = sys.argv[3] #'../gff2cds/pep.fa'
 file_cds         = sys.argv[4] #'../gff2cds/cds.fa'
