@@ -1,0 +1,244 @@
+## pipeline for Chlamydomonas using multiple gene parameters including Cre, Ath, Hsa, Sce
+
+
+SRRIDs = [x.strip() for x in open('data/samples').readlines()]
+INDEX  = "/data/References/Creinhardtii/Creinhardtii_281_v5.0"
+FA     = "/data/References/Creinhardtii/Creinhardtii_281_v5.0.fa"
+PFAM   = "/data/References/Pfam\ HMM/Pfam-A.hmm"
+GFF    = "/data/References/Creinhardtii/annotation/Creinhardtii_281_v5.5.gene.fix.gff3"
+UNIPROT = "/data/References/uniprot-all.fasta"
+
+HISAT2    = "/programs/hisat2-2.0.4/"
+STRINGTIE = "/programs/stringtie-1.2.4.Linux_x86_64//"
+Transdecoder = "/programs/TransDecoder-3.0.0/"
+AUGUSTUS     = "/programs/augustus-3.2.2/"
+SPECIES      = ["chlamy2011","arabidopsis","saccharomyces","human"]
+CUFFLINK     = "/programs/cufflinks-2.2.1.Linux_x86_64/"
+
+rule end:
+     input : "finalout/my_csv.csv.addgene.gff3.sort.gff3.merge.all.gff3.sort.gff3","finalout/newgene.annot"
+
+rule NCBIdownload:
+     params : "{SRRID}",SRRID=SRRIDs
+     output : "{SRRID}.sra" 
+     shell  : "python2.7 ncbi_download.py {params}"
+
+rule fastqdump:
+     input  : "{SRRID}.sra"
+     output : "data/{SRRID}_1.fastq.gz","data/{SRRID}_2.fastq.gz" # paired_end
+     shell  : '''fastq-dump  --origfmt -I  --split-files --gzip {input}
+                 mv {wildcards.SRRID}_?.fastq.gz data/
+                 rm {input}'''
+
+           
+# Single end 
+rule Hisat2:
+     input  : 
+             #single="data/{SRRID}.fastq.gz", #single end
+             fwd="data/{SRRID}_1.fastq.gz",rev="data/{SRRID}_2.fastq.gz" # paired end 
+     params : ix=INDEX,cmd=HISAT2
+     output : 
+             "mapped/{SRRID}.pre.bam"
+     threads : 1
+     shell  : 
+             #"{params.cmd}hisat2 --max-intronlen 30000 -p {threads} -x {params.ix} -U {input.single}  | sambamba view -f bam -o {output} -S /dev/stdin" # single end 
+             "{params.cmd}hisat2 --rna-strandness RF --max-intronlen 30000 -p {threads} -x {params.ix} -1 {input.fwd} -2 {input.rev}  | sambamba view -f bam -o {output} -S /dev/stdin" # paired-end
+# add "--rna-strandness FR #RF for dUTP protocol" if your library is constructed based on strandness 
+
+rule sambamba_sort : 
+     input  : 
+            "mapped/{SRRID}.pre.bam"
+     output :
+            "mapped/{SRRID}.sorted.bam"
+            #"mapped/{SRRID}.sorted.bam.bai"
+     threads : 10
+     shell  : 
+            '''sambamba sort -t {threads} -o {output}  {input}
+               '''
+
+#Usage: sambamba-merge [options] <output.bam> <input1.bam> <input2.bam> [...]
+rule sambamba_merge : 
+     input  : 
+            bam=expand("mapped/{SRRID}.sorted.bam",SRRID=SRRIDs),
+            #bai=expand("mapped/{SRRID}.sorted.bam.bai",SRRID=SRRIDs)
+     output : 
+            "merged/all.merged.bam"
+     threads : 10
+     shell  : "sambamba merge -t {threads} {output} {input.bam}"
+            
+rule stringtie:
+     input  :
+            "merged/all.merged.bam"
+     output : 
+            "st_gff_out/all.merged.bam.stringtie.gff"
+     threads : 1 
+     params : cmd=STRINGTIE, gff=GFF
+     shell  : 
+            "{params.cmd}stringtie -p {threads} -G {params.gff} -o {output} {input}"
+
+
+rule stringtie2gff3:
+     input  :
+            "st_gff_out/all.merged.bam.stringtie.gff"
+     output : 
+            "st_gff_out/all.merged.bam.stringtie.gff3"
+     params : cmd=Transdecoder
+     shell  : 
+            "{params.cmd}/util/cufflinks_gtf_to_alignment_gff3.pl {input} > {output}"
+
+rule stringtie2cds:
+     input  : "st_gff_out/all.merged.bam.stringtie.gff"
+     output : "st_gff_out/all.merged.bam.stringtie.gff.fa"
+     params : fa=FA,cmd=Transdecoder
+     shell  : 
+            "{params.cmd}/util/cufflinks_gtf_genome_to_cdna_fasta.pl {input}  {params.fa} > {output}"
+
+
+### transdecoder 
+
+rule transdecoder_longOrfs:
+     input  : "st_gff_out/all.merged.bam.stringtie.gff.fa"
+     output : "all.merged.bam.stringtie.gff.fa.transdecoder_dir/longest_orfs.pep" 
+     params : cmd=Transdecoder
+     shell  : 
+            "{params.cmd}/TransDecoder.LongOrfs -t {input}"
+
+rule hmm:
+     input  : "all.merged.bam.stringtie.gff.fa.transdecoder_dir/longest_orfs.pep" 
+     output : "all.merged.bam.stringtie.gff.fa.transdecoder_dir/pfam.domtblout"
+     threads: 8
+     params : pfam=PFAM
+     shell  : 
+            "hmmscan --cpu {threads} --domtblout {output} {params.pfam} {input}"
+
+rule transdecoder_predict:
+     input  : fa="st_gff_out/all.merged.bam.stringtie.gff.fa", pfam="all.merged.bam.stringtie.gff.fa.transdecoder_dir/pfam.domtblout"
+     output : "predicted/all.merged.bam.stringtie.gff.fa.transdecoder.gff3" 
+     threads: 10
+     params : cmd=Transdecoder
+     shell  : 
+            '''{params.cmd}/TransDecoder.Predict --cpu {threads} -t {input.fa} --retain_pfam_hits {input.pfam}        
+               mv all.merged.bam.stringtie.gff.fa.transdecoder.* predicted/'''
+        
+rule transdecoder_togenome:
+     input  : sgff="st_gff_out/all.merged.bam.stringtie.gff", tgff="predicted/all.merged.bam.stringtie.gff.fa.transdecoder.gff3"
+     output : "predicted/all.merged.bam.stringtie.gff.fa.transdecoder.gff3.genome.gff"
+     shell  : "python2.7 stringtie.addcds.py {input.sgff} {input.tgff}"
+
+rule transdecoder_noiseremove:
+     input  : "predicted/all.merged.bam.stringtie.gff.fa.transdecoder.gff3.genome.gff"
+     output : "predicted/selected_mRNA_v4.gff"
+     shell  : '''python2.7 noiseremove.py {input} 
+                 mv selected_mRNA_v4.gff predicted/'''
+###
+
+### Augustus 
+
+rule augustus_chlamy:
+     input  : "st_gff_out/all.merged.bam.stringtie.gff.fa"
+     params : cmd=AUGUSTUS,species="chlamy2011"
+     output : "predicted/all.merged.bam.stringtie.gff.fa.augustus.chlamy.gff3"
+     shell  : '''
+              {params.cmd}/bin/augustus --species={params.species} --genemodel=complete --gff3=on --strand=forward {input} > {output}'''
+rule augustus_togenome_chlamy:
+     input  : sgff="st_gff_out/all.merged.bam.stringtie.gff",tgff="predicted/all.merged.bam.stringtie.gff.fa.augustus.chlamy.gff3"
+     output : "predicted/all.merged.bam.stringtie.gff.fa.augustus.chlamy.gff3.genome.v1.gff"
+     shell  :  '''python2.7 stringtie.augustus.addcds.py {input.sgff} {input.tgff} {output}'''
+
+
+rule augustus_ath:
+     input  : "st_gff_out/all.merged.bam.stringtie.gff.fa"
+     params : cmd=AUGUSTUS,species="arabidopsis"
+     output : "predicted/all.merged.bam.stringtie.gff.fa.augustus.arabidopsis.gff3"
+     shell  : '''
+              {params.cmd}/bin/augustus --species={params.species} --genemodel=complete --gff3=on --strand=forward {input} > {output}'''
+rule augustus_togenome_ath:
+     input  : sgff="st_gff_out/all.merged.bam.stringtie.gff",tgff="predicted/all.merged.bam.stringtie.gff.fa.augustus.arabidopsis.gff3"
+     output : "predicted/all.merged.bam.stringtie.gff.fa.augustus.arabidopsis.gff3.genome.v1.gff"
+     shell  :  '''python2.7 stringtie.augustus.addcds.py {input.sgff} {input.tgff} {output}'''
+
+rule augustus_human:
+     input  : "st_gff_out/all.merged.bam.stringtie.gff.fa"
+     params : cmd=AUGUSTUS,species="human"
+     output : "predicted/all.merged.bam.stringtie.gff.fa.augustus.human.gff3"
+     shell  : '''
+              {params.cmd}/bin/augustus --species={params.species} --genemodel=complete --gff3=on --strand=forward {input} > {output}'''
+rule augustus_togenome_human:
+     input  : sgff="st_gff_out/all.merged.bam.stringtie.gff",tgff="predicted/all.merged.bam.stringtie.gff.fa.augustus.human.gff3"
+     output : "predicted/all.merged.bam.stringtie.gff.fa.augustus.human.gff3.genome.v1.gff"
+     shell  :  '''python2.7 stringtie.augustus.addcds.py {input.sgff} {input.tgff} {output}'''
+
+rule augustus_sce:
+     input  : "st_gff_out/all.merged.bam.stringtie.gff.fa"
+     params : cmd=AUGUSTUS,species="saccharomyces"
+     output : "predicted/all.merged.bam.stringtie.gff.fa.augustus.sce.gff3"
+     shell  : '''
+              {params.cmd}/bin/augustus --species={params.species} --genemodel=complete --gff3=on --strand=forward {input} > {output}'''
+rule augustus_togenome_sce:
+     input  : sgff="st_gff_out/all.merged.bam.stringtie.gff",tgff="predicted/all.merged.bam.stringtie.gff.fa.augustus.sce.gff3"
+     output : "predicted/all.merged.bam.stringtie.gff.fa.augustus.sce.gff3.genome.v1.gff"
+     shell  :  '''python2.7 stringtie.augustus.addcds.py {input.sgff} {input.tgff} {output}'''
+###
+
+rule integrate:
+     input  : fa="st_gff_out/all.merged.bam.stringtie.gff.fa", ag_c="predicted/all.merged.bam.stringtie.gff.fa.augustus.chlamy.gff3.genome.v1.gff", ag_a="predicted/all.merged.bam.stringtie.gff.fa.augustus.arabidopsis.gff3.genome.v1.gff",ag_s = "predicted/all.merged.bam.stringtie.gff.fa.augustus.sce.gff3.genome.v1.gff",ag_h = "predicted/all.merged.bam.stringtie.gff.fa.augustus.human.gff3.genome.v1.gff", td="predicted/selected_mRNA_v4.gff"
+     output : "predicted/my_csv.csv"
+     shell  : '''python2.7 integrate_multiprediction.py {input.fa} {input.ag_c} {input.ag_a} {input.ag_h} {input.ag_s} {input.td}
+                 mv my_csv.csv predicted/'''
+
+
+rule addgenes:
+     input  : "predicted/my_csv.csv"
+     output : "predicted/my_csv.csv.addgene.gff3"
+     shell  : "python2.7 addgenefeature.py {input}" 
+                
+rule gt_sort:
+     input  : "predicted/my_csv.csv.addgene.gff3"
+     output : "predicted/my_csv.csv.addgene.gff3.sort.gff3"
+     shell  : "gt gff3 -sort -retainids {input} > {output}" 
+
+
+rule cuffcompare:
+     input  : "predicted/my_csv.csv.addgene.gff3.sort.gff3"
+     output : "predicted/cuffcmp.my_csv.csv.addgene.gff3.sort.gff3.tmap"
+     params : rgff=GFF, cmd=CUFFLINK
+     shell  : '''{params.cmd}cuffcompare -r {params.rgff} {input}
+                 mv cuffcmp.* predicted/'''
+
+rule merge:
+     input  : gff="predicted/my_csv.csv.addgene.gff3.sort.gff3", tmap="predicted/cuffcmp.my_csv.csv.addgene.gff3.sort.gff3.tmap", gff_old=GFF, pepfa_new="finalout/my_csv.csv.addgene.gff3.sort.gff3.pep.fa"
+     output : gff="predicted/my_csv.csv.addgene.gff3.sort.gff3.merge.all.gff3", fa="finalout/my_csv.csv.addgene.gff3.sort.gff3.pep.fa.new_gene.fa"          
+     params : rgff=GFF 
+     shell  : '''python2.7 merge.py {input.tmap} {input.gff} {input.gff_old} {input.pepfa_new}
+               cat {params.rgff} predicted/my_csv.csv.addgene.gff3.sort.gff3.merge.gff3 > {output.gff}'''
+
+rule gt_sort2:
+     input  : "predicted/my_csv.csv.addgene.gff3.sort.gff3.merge.all.gff3"
+     output : "finalout/my_csv.csv.addgene.gff3.sort.gff3.merge.all.gff3.sort.gff3"
+     shell  : "gt gff3 -sort -retainids {input} > {output}"
+
+
+rule gff2cds:
+     input  : gff="predicted/my_csv.csv.addgene.gff3.sort.gff3"
+     params : fa=FA
+     output : "finalout/my_csv.csv.addgene.gff3.sort.gff3.cds.fa"
+     shell  : "python2.7 gff2cds.py {params.fa} {input.gff} {output}"
+
+rule cds2pep:
+     input  : "finalout/my_csv.csv.addgene.gff3.sort.gff3.cds.fa"
+     output : "finalout/my_csv.csv.addgene.gff3.sort.gff3.pep.fa"
+     shell  : "python2.7 translation.py {input} {output}"
+
+rule newgenes2uniprot:
+     input  : "finalout/my_csv.csv.addgene.gff3.sort.gff3.pep.fa.new_gene.fa"
+     output : "blastout/newgene.na1.ev1e2.bo"
+     params : uniprot=UNIPROT
+     threads: 5 
+     shell  : "blastp -query {input} -db {params.uniprot} -out {output} -outfmt 7 -num_threads {threads} -num_alignments 1 -evalue 1e-2"  
+
+rule uniprot2annot:
+     input  : "blastout/newgene.na1.ev1e2.bo"
+     output : "finalout/newgene.annot"
+     params : uniprot=UNIPROT
+     shell  : "python2.7 uniprot_annot.py {input} {params.uniprot}; mv blastout/newgene.na1.ev1e2.bo.annot {output} "
+     
