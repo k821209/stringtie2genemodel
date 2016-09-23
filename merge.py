@@ -78,7 +78,7 @@ with open(file_gff3+'.merge.gff3','w') as f:
         Other_df.to_csv(f,header=None,index=None,sep='\t')  
 
 # adding new genes 
-mask           = (df_tmap['class_code'] == 'u')
+mask           = (df_tmap['class_code'] == 'u') | (df_tmap['class_code'] == 'o')
 df_tmap_sub    = df_tmap[mask]
 df_tmap_sub_ix = df_tmap_sub.set_index('cuff_id')
 
