@@ -9,7 +9,7 @@ import sys
 file_stringtie_gff    = sys.argv[1] # '/ref/analysis/Cre/braker/braker.try5_mario/guided/intron3000.merge.sorted.bam.gffguided.stringtie.gff.strandcor.gff'
 #file_transdecoder_gff = '/ref/analysis/Cre/braker/braker.try5_mario/guided/transcripts.fasta.transdecoder.gff3'
 file_transdecoder_gff = sys.argv[2] #'test.augustus.gff3.nosharp.gff3'
-
+file_Out              = sys.argv[3] 
 df_stringtie_gff                  = pd.read_csv(file_stringtie_gff,sep='\t',header=None,comment='#')
 df_transdecoder_gff               = pd.read_csv(file_transdecoder_gff,sep='\t',header=None,comment='#')
 df_stringtie_gff['transcript_id'] = df_stringtie_gff[8].apply(lambda x : x.split(';')[1].replace('transcript_id','').strip().strip('"'))
@@ -226,5 +226,6 @@ for target_contig in tqdm(contiglist):
 
 df_new_gff = pd.DataFrame(dic_gff,columns=['Chromosome','source','feature','start','end','score','strand','frame','GFF3: grouping attributes'])
 df_new_gff['Name'] = df_new_gff['GFF3: grouping attributes'].apply(lambda x : x.split(';')[-1])
-df_new_gff.sort_values(by=['Name','start']).to_csv(file_transdecoder_gff.split('/')[-1]+'.genome.v1.gff',sep='\t')
+#df_new_gff.sort_values(by=['Name','start']).to_csv(file_transdecoder_gff.split('/')[-1]+'.genome.v1.gff',sep='\t')
+df_new_gff.sort_values(by=['Name','start']).to_csv(file_Out,sep='\t')
 
