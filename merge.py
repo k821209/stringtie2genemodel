@@ -106,7 +106,7 @@ df_new['seq'] = df_new['cuff_id'].apply(lambda x : dicfa[x])
 
 with open(file_pep_new+'.new_gene.fa','w') as f:
     for ix in set(df_new.index):
-        hd  = df_new.loc[ix][11]
+        hd  = df_new.loc[ix]['cuff_id']
         seq = df_new.loc[ix]['seq']
         print('>'+hd,file=f)
         print(seq,file=f)
