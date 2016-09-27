@@ -142,8 +142,7 @@ rule augustus:
 rule augustus_togenome:
      input  : sgff="st_gff_out/all.merged.bam.stringtie.gff",tgff="predicted/all.merged.bam.stringtie.gff.fa.augustus.gff3"
      output : "predicted/all.merged.bam.stringtie.gff.fa.augustus.gff3.genome.v1.gff"
-     shell  :  '''python2.7 stringtie.augustus.addcds.py {input.sgff} {input.tgff}
-                  mv all.merged.bam.stringtie.gff.fa.augustus.gff3.genome.v1.gff predicted/all.merged.bam.stringtie.gff.fa.augustus.gff3.genome.v1.gff '''
+     shell  :  '''python2.7 stringtie.augustus.addcds.py {input.sgff} {input.tgff} {output}'''
 
 ###
 
