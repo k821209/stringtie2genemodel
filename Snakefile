@@ -1,15 +1,15 @@
 SRRIDs = [x.strip() for x in open('data/samples').readlines()]
-INDEX  = "/data/References/Creinhardtii/Creinhardtii_281_v5.0"
-FA     = "/data/References/Creinhardtii/Creinhardtii_281_v5.0.fa"
-PFAM   = "/data/References/References/Pfam\ HMM/Pfam-A.hmm"
-GFF    = "/data/References/References/Creinhardtii/Creinhardtii_281_v5.5.gene.fix.gff3"
-UNIPROT = "/data/References/References/uniprot/uniprot-all.fasta.asof2016"
+INDEX  = "/storage/DroughtNet/OSA/stringtie2genemodel/Osativa/assembly/Osativa_323_v7.0"
+FA     = "/storage/DroughtNet/OSA/stringtie2genemodel/Osativa/assembly/Osativa_323_v7.0.fa"
+PFAM   = "./Pfam/Pfam-A.hmm"
+GFF    = "/storage/DroughtNet/OSA/stringtie2genemodel/Osativa/annotation/Osativa_323_v7.0.gene.gff3"
+UNIPROT = "/storage/DroughtNet/OSA/stringtie2genemodel/Osativa/uniprot-all.fasta"
 
 HISAT2    = "/programs/hisat2-2.0.4/"
 STRINGTIE = "/programs/stringtie-1.2.4.Linux_x86_64//"
 Transdecoder = "/programs/TransDecoder-3.0.0/"
 AUGUSTUS     = "/programs/augustus-3.2.2/"
-SPECIES      = "chlamy2011"
+SPECIES      = "rice"
 CUFFLINK     = "/programs/cufflinks-2.2.1.Linux_x86_64/"
 
 
@@ -75,6 +75,11 @@ rule stringtie:
      shell  : 
             "{params.cmd}stringtie -p {threads} -o {output} {input}"
 
+rule stringtie2cuffcompare:
+     input : "st_gff_out/all.merged.bam.stringtie.gff"
+     output : "st_gff_out/cuffcmp.all.merged.bam.stringtie.gff.tmap"
+     params : cmd=CUFFLINK, ref=GFF
+     shell  : "(params.cmd)cuffcompare -r {params.ref} {input}"
 
 rule stringtie2gff3:
      input  :
