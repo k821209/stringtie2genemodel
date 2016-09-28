@@ -57,6 +57,7 @@ chromosomes.sort()
 dicN2chr          = dict(enumerate(chromosomes))
 dicChr2N          = {b:a for a,b in dicN2chr.iteritems()}
 columns           = max([len(x) for x in dicHD2seq.values()])-1
+print(rows,columns)
 continuity_matrix = np.zeros([rows,columns],dtype=np.int)
 match_matrix      = np.zeros([rows,columns],dtype=np.int)
 #Outfile = open('chromosome.map.txt','w')
