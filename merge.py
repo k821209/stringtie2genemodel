@@ -67,14 +67,24 @@ mask           = (df_tmap['class_code'] == 'j')
 df_tmap_sub    = df_tmap[mask]
 df_tmap_sub_ix = df_tmap_sub.set_index('cuff_id')
 
+dicG2addn = {}
+
 with open(file_gff3+'.merge.gff3','w') as f:
-    for ix in df_tmap_sub_ix.index:
-        preparent = '.'.join(ix.split('.')[0:2])
-        info      = 'ID=%s;Parent=%s;Name=%s'%(ix,dicT2G[df_tmap_sub_ix.loc[ix]['ref_id']],ix)
+    for ix in set(df_tmap_sub_ix.index):
+        parent_name     = dicT2G[df_tmap_sub_ix.loc[ix]['ref_id']]
+        try:
+            tn = dicG2addn[parent_name] + 1
+            dicG2addn[parent_name] += 1
+        except KeyError:
+            tn = 1
+            dicG2addn[parent_name] = 1 
+        transcript_name = parent_name+'.st.%d'%tn 
+        info      = 'ID=%s;Parent=%s;Name=%s'%(transcript_name,parent_name,transcript_name)
         edf       =  df_gff_transcript_ix.loc[ix]
         mRNA_df   = edf[edf[2] == 'mRNA']
         Other_df  = edf[edf[2] != 'mRNA']
         print ('\t'.join(map(str,mRNA_df[[0,1,2,3,4,5,6,7]].values[0])),info,sep='\t',file=f)
+        Other_df[8] = Other_df[8].apply(lambda x: x.replace(ix,transcript_name)) 
         Other_df.to_csv(f,header=None,index=None,sep='\t')  
 
 # adding new genes 
