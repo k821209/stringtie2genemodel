@@ -1,17 +1,17 @@
 SRRIDs = [x.strip() for x in open('data/samples').readlines()]
-INDEX  = "/storage/DroughtNet/OSA/stringtie2genemodel/Osativa/assembly/Osativa_323_v7.0"
-FA     = "/storage/DroughtNet/OSA/stringtie2genemodel/Osativa/assembly/Osativa_323_v7.0.fa"
-PFAM   = "./Pfam/Pfam-A.hmm"
-GFF    = "/storage/DroughtNet/OSA/stringtie2genemodel/Osativa/annotation/Osativa_323_v7.0.gene.gff3"
-UNIPROT = "/storage/DroughtNet/OSA/stringtie2genemodel/Osativa/uniprot-all.fasta"
+INDEX  = "ref/GCF_000633955.1_Cs_genomic"
+FA     = "ref/GCF_000633955.1_Cs_genomic.fna"
+PFAM   = "/ref/analysis/References/Pfam-A.hmm"
+GFF    = "ref/GCF_000633955.1_Cs_genomic.gff"
+UNIPROT = "/ref/analysis/References/uniprot/uniprot-all.fasta"
 
 HISAT2    = "/programs/hisat2-2.0.4/"
 STRINGTIE = "/programs/stringtie-1.2.4.Linux_x86_64//"
 Transdecoder = "/programs/TransDecoder-3.0.0/"
 AUGUSTUS     = "/programs/augustus-3.2.2/"
-SPECIES      = "rice"
+SPECIES      = "arabidopsis"
 CUFFLINK     = "/programs/cufflinks-2.2.1.Linux_x86_64/"
-
+SRATK        = "/programs/sratoolkit.2.7.0-ubuntu64/bin/"
 
 
 rule end:
@@ -25,7 +25,8 @@ rule NCBIdownload:
 rule fastqdump:
      input  : "{SRRID}.sra"
      output : "data/{SRRID}_1.fastq.gz","data/{SRRID}_2.fastq.gz" # paired_end
-     shell  : '''fastq-dump  --origfmt -I  --split-files --gzip {input}
+     params : cmd=SRATK
+     shell  : '''{params.cmd}fastq-dump  --origfmt -I  --split-files --gzip {input}
                  mv {wildcards.SRRID}_?.fastq.gz data/
                  rm {input}'''
 
